@@ -5,16 +5,13 @@ from urllib.parse import unquote
 import markdownify
 import config
 import logging
+import click
 
 logging.basicConfig(level=logging.INFO)
 
-logging.info("Starting")
-
 refresh_rate = datetime.timedelta(hours=1)
-last_successful_fetch_date = datetime.datetime.now()
-content_max_length = 300
 
-already_seen_posts = []
+content_max_length = 300
 
 def get_recent_posts(after_date):
     return requests.get(
@@ -29,7 +26,7 @@ def get_user_name(id):
         f"{config.WEBSITE}/wp-json/wp/v2/users/{id}",
     ).json()
     try:
-        name = res['name']
+        name = resp['name']
     except IndexError:
         logging.warning("error for name")
         name = "?"
@@ -47,7 +44,7 @@ def get_media_url(id):
     return url
 
 def create_msg(post):
-    username = get_user(post['author'])['name']
+    username = get_user_name(post['author'])
     print(post['title']['rendered'])
     text = markdownify.markdownify(post['content']['rendered'].encode('utf8'))
     for i in range(3):
@@ -78,29 +75,50 @@ def send_msg(message):
     )
     print(res.text)
 
-logging.debug("Fetching already existing articles")
-already_seen_posts.extend(
-    [post['id'] for post in get_recent_posts(last_successful_fetch_date - datetime.timedelta(seconds=110))]
-)
+@click.command()
+@click.option("--test/--no-test", default=False)
+def main(test):
+    logging.info("Starting")
+    last_successful_fetch_date = datetime.datetime.now()
+    already_seen_posts = []
 
-logging.info("Started")
+    if not test:
+        logging.debug("Fetching already existing articles")
+        already_seen_posts.extend(
+            [post['id'] for post in get_recent_posts(last_successful_fetch_date - datetime.timedelta(seconds=110))]
+        )
 
-while True:
-    time.sleep(refresh_rate.seconds)
-    logging.info(f"Fetching {config.WEBSITE}")
-    fetch_date = datetime.datetime.now()
-    posts = []
-    try:
-        posts = get_recent_posts(last_successful_fetch_date - datetime.timedelta(seconds=100))
-    except Exception as e:
-        logging.warning(e)
-        continue
-    last_successful_fetch_date = fetch_date
-    for post in posts:
-        if post['id'] in already_seen_posts:
+    logging.info("Started")
+    while True:
+        if not test:
+            time.sleep(refresh_rate.seconds)
+        logging.info(f"Fetching {config.WEBSITE}")
+        fetch_date = datetime.datetime.now()
+        posts = []
+        try:
+            if not test:
+                posts = get_recent_posts(last_successful_fetch_date - datetime.timedelta(seconds=100))
+            else:
+                posts = get_recent_posts(last_successful_fetch_date - datetime.timedelta(days=3))
+        except Exception as e:
+            logging.warning(e)
             continue
-        msg = create_msg(post)
-        already_seen_posts.append(post['id'])
-        send_msg(msg)
-    
-logging.info("Exiting.")
+        last_successful_fetch_date = fetch_date
+        for post in posts:
+            if post['id'] in already_seen_posts:
+                continue
+            msg = create_msg(post)
+            already_seen_posts.append(post['id'])
+            logging.info(f"New article found : {markdownify.markdownify(post['title']['rendered'].encode('utf8'))}")
+            if not test:
+                send_msg(msg)
+            else:
+                logging.info(f"Skipping sending to discord the messsage :\n{msg}")
+        
+        if test:
+            break
+                
+    logging.info("Exiting.")
+
+if __name__ == "__main__":
+    main()
