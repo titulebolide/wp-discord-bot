@@ -61,14 +61,14 @@ def create_msg(post):
     """
     return message
 
-def send_msg(message):
+def send_msg(message, media_url):
     res = requests.post(
         config.DISCORD_WEBHOOK, 
         json = {
             'content':message,
             'embeds': [{
                 "image": {
-                    "url": get_media_url(post['featured_media'])
+                    "url": media_url
                 }
             }]
         }
@@ -108,10 +108,11 @@ def main(test):
             if post['id'] in already_seen_posts:
                 continue
             msg = create_msg(post)
+            media_url = get_media_url(post['featured_media'])
             already_seen_posts.append(post['id'])
             logging.info(f"New article found : {markdownify.markdownify(post['title']['rendered'].encode('utf8'))}")
             if not test:
-                send_msg(msg)
+                send_msg(msg, media_url)
             else:
                 logging.info(f"Skipping sending to discord the messsage :\n{msg}")
         
