@@ -6,6 +6,7 @@ import markdownify
 import config
 import logging
 import click
+import re
 
 logging.basicConfig(level=logging.INFO)
 
@@ -47,8 +48,10 @@ def create_msg(post):
     username = get_user_name(post['author'])
     print(post['title']['rendered'])
     text = markdownify.markdownify(post['content']['rendered'].encode('utf8'))
-    for i in range(3):
+    for i in range(3): # remove multiple new line
         text = text.replace('\n\n','\n')
+    text = "\n".join(re.findall('(?:(?<=\])|(?<=^))([^\[\]]+)(?:(?=\[)|(?=$))', text)) # remove wp tags (surrounded by brackets)
+    text = text.rstrip('\n ').lstrip('\n ') # remove heading or trailing new line of spaces
     text = text.replace('\n', '\n> ').rstrip('>')
     if len(text) > content_max_length:
         text = text[:content_max_length].rstrip('.') + "..."
